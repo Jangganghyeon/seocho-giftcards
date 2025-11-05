@@ -212,7 +212,7 @@ if MAPBOX:
 else:
     # Fallback: still render (basemap may be minimal)
     st.pydeck_chart(r, use_container_width=True)
-    st.info("💡 더 선명한 지도를 원하면 Streamlit Secrets에 `MAPBOX_API_KEY`를 추가하세요.")
+    st.info("💡 티머니나 문화상품권 버튼을 누르면 해당하는 가맹점만 지도에 표시돼요.")
 
 # Legend
 st.markdown(
