@@ -254,5 +254,3 @@ with list_left:
 with list_right:
     for _, rrow in right_df.iterrows():
         render_card(rrow)
-
-st.markdown('<div class="footer-note">※ 현재 데이터는 예시입니다. 실제 사용처 데이터로 교체해 주세요.</div>', unsafe_allow_html=True)
