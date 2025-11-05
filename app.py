@@ -15,7 +15,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
-# Global CSS (glassmorphism + gradient)
+# Global CSS (glassmorphism + gradient + badges + legend)
 st.markdown(
     """
     <style>
@@ -61,10 +61,22 @@ st.markdown(
     }
     .kpi { font-size: 32px; font-weight: 800; letter-spacing:-0.5px;}
     .kpi-sub { color:#334155; font-weight:600; }
-    .legend {
-        display:flex; gap: 10px; align-items:center; margin-top:6px;
+    .legend-row {
+        display:flex; gap: 12px; align-items:center; justify-content:flex-start;
+        margin: 8px 0 6px 2px;
     }
-    .legend .dot { width:14px; height:14px; border-radius:50%; display:inline-block; }
+    .chip {
+        display:inline-flex; align-items:center; gap:8px;
+        padding: 8px 12px; border-radius: 999px; font-weight: 800; color: white;
+        box-shadow: 0 10px 20px rgba(2,6,23,0.15);
+    }
+    .chip-blue { background:#0ea5e9; }
+    .chip-orange { background:#f97316; }
+    .chip-gray { background:#0f172a; color:#e2e8f0; }
+    .badge-dot {
+        width:12px; height:12px; border-radius:50%; display:inline-block; background:white; opacity:.9;
+        box-shadow: inset 0 0 0 1px rgba(255,255,255,.3);
+    }
     .footer-note { color:#475569; font-size: 13px; }
     </style>
     """,
@@ -120,7 +132,7 @@ with st.container():
     )
 
 # -----------------------------
-# Controls (Buttons) — 단일 클릭 즉시 하이라이트
+# Controls — 단일 클릭 즉시 반영
 # -----------------------------
 if "selected" not in st.session_state:
     st.session_state["selected"] = "all"
@@ -128,30 +140,25 @@ selected = st.session_state["selected"]
 
 col1, col2, col3, col4 = st.columns([1,1,1,3])
 
-# 현재 상태에 맞춰 type 지정해서 그리기
 tmoney_type  = "primary" if selected == "tmoney" else "secondary"
 culture_type = "primary" if selected == "culture" else "secondary"
 all_type     = "primary" if selected == "all" else "secondary"
 
 with col1:
     if st.button("티머니", key="tmoney_btn", type=tmoney_type, use_container_width=True):
-        st.session_state["selected"] = "tmoney"
-        st.rerun()
+        st.session_state["selected"] = "tmoney"; st.rerun()
 with col2:
     if st.button("문화상품권", key="culture_btn", type=culture_type, use_container_width=True):
-        st.session_state["selected"] = "culture"
-        st.rerun()
+        st.session_state["selected"] = "culture"; st.rerun()
 with col3:
     if st.button("전체 보기", key="all_btn", type=all_type, use_container_width=True):
-        st.session_state["selected"] = "all"
-        st.rerun()
+        st.session_state["selected"] = "all"; st.rerun()
 
 selected = st.session_state["selected"]
-
 st.caption(f"현재 선택: {'티머니' if selected=='tmoney' else '문화상품권' if selected=='culture' else '전체'}")
 
 # -----------------------------
-# Filtering
+# 필터 + 옵션
 # -----------------------------
 if selected == "tmoney":
     filtered = df[df["type"] == "tmoney"].copy()
@@ -159,6 +166,9 @@ elif selected == "culture":
     filtered = df[df["type"] == "culture"].copy()
 else:
     filtered = df.copy()
+
+# 라벨 표시 토글
+show_labels = st.checkbox("지도에 라벨(약어) 표시", value=False)
 
 # -----------------------------
 # KPIs — 총 가맹점 고정
@@ -181,7 +191,21 @@ with k3:
     )
 
 # -----------------------------
-# Map (pydeck)
+# 지도 상단 큰 레전드(한눈에 파악)
+# -----------------------------
+st.markdown(
+    """
+    <div class="legend-row">
+      <span class="chip chip-blue"><span class="badge-dot"></span> 티머니 (파란 점)</span>
+      <span class="chip chip-orange"><span class="badge-dot"></span> 문화상품권 (주황 점)</span>
+      <span class="chip chip-gray">지도 위 점을 호버하면 상세 정보 표시</span>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
+
+# -----------------------------
+# Map (pydeck) — Glow + Dot 레이어로 더 고급스럽게
 # -----------------------------
 COLOR_T = [14, 165, 233]    # sky-500
 COLOR_C = [249, 115, 22]    # orange-500
@@ -191,24 +215,43 @@ def assign_color(row):
 
 filtered = filtered.copy()
 filtered["color"] = filtered.apply(assign_color, axis=1)
+filtered["type_kor"] = filtered["type"].map({"tmoney": "티머니", "culture": "문화상품권"})
+filtered["abbr"] = filtered["type"].map({"tmoney": "T", "culture": "C"})
 
-tooltip_html = {
-    "html": """
-    <div style="font-family: Pretendard, sans-serif; min-width:220px">
-        <div style="font-weight:800; font-size:16px; margin-bottom:4px;">{name}</div>
-        <div style="font-weight:600; opacity:.75; margin-bottom:6px;">{type_kor} • {category}</div>
-        <div style="font-size:13px; opacity:.9;">{address}</div>
-    </div>
-    """,
-    "style": { "backgroundColor": "white", "color": "#0f172a" }
-}
+# 툴팁 (상단 색 배지 + 정보)
+def tooltip_html():
+    return {
+        "html": """
+        <div style="font-family: Pretendard, sans-serif; min-width:240px">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+            <span style="display:inline-block;width:10px;height:10px;border-radius:50%;
+                         background:{badge};box-shadow:0 0 0 2px rgba(255,255,255,.6) inset"></span>
+            <div style="font-weight:800; font-size:16px;">{name}</div>
+          </div>
+          <div style="font-weight:600; opacity:.8; margin-bottom:6px;">{type_kor} • {category}</div>
+          <div style="font-size:13px; opacity:.9;">{address}</div>
+        </div>
+        """,
+        "style": { "backgroundColor": "white", "color": "#0f172a" }
+    }
 
-MAPBOX = st.secrets.get("MAPBOX_API_KEY", os.environ.get("MAPBOX_API_KEY", None))
-map_style = "mapbox://styles/mapbox/dark-v11" if MAPBOX else None
-
-layer = pdk.Layer(
+# 레이어 구성: Glow(큰 반경, 낮은 불투명) + Dot(작은 반경, 선명)
+glow_layer = pdk.Layer(
     "ScatterplotLayer",
-    data=filtered.assign(type_kor=filtered["type"].map({"tmoney":"티머니", "culture":"문화상품권"})),
+    data=filtered,
+    get_position='[lon, lat]',
+    get_radius=140,
+    radius_min_pixels=8,
+    radius_max_pixels=80,
+    get_fill_color="color",
+    pickable=False,
+    stroked=False,
+    opacity=0.18,
+)
+
+dot_layer = pdk.Layer(
+    "ScatterplotLayer",
+    data=filtered,
     get_position='[lon, lat]',
     get_radius=65,
     radius_min_pixels=5,
@@ -218,36 +261,45 @@ layer = pdk.Layer(
     stroked=True,
     get_line_color=[255,255,255],
     line_width_min_pixels=1,
-    auto_highlight=True
+    auto_highlight=True,
 )
 
-view_state = pdk.ViewState(latitude=CENTER[0], longitude=CENTER[1], zoom=12.2, pitch=45, bearing=8)
+layers = [glow_layer, dot_layer]
 
-r = pdk.Deck(
-    layers=[layer],
+# 옵션: 라벨(약어) 표시
+if show_labels:
+    text_layer = pdk.Layer(
+        "TextLayer",
+        data=filtered,
+        get_position='[lon, lat]',
+        get_text="abbr",
+        get_color="color",
+        get_size=16,
+        get_alignment_baseline="'center'",
+        get_text_anchor="'middle'",
+        pickable=False,
+        billboard=True,
+    )
+    layers.append(text_layer)
+
+MAPBOX = st.secrets.get("MAPBOX_API_KEY", os.environ.get("MAPBOX_API_KEY", None))
+map_style = "mapbox://styles/mapbox/dark-v11" if MAPBOX else None
+
+view_state = pdk.ViewState(latitude=37.4831, longitude=127.0327, zoom=12.2, pitch=45, bearing=8)
+
+deck = pdk.Deck(
+    layers=layers,
     initial_view_state=view_state,
     map_style=map_style,
-    tooltip=tooltip_html,
+    tooltip=tooltip_html()
 )
 
-st.pydeck_chart(r, use_container_width=True)
+st.pydeck_chart(deck, use_container_width=True)
 
-# Legend
-st.markdown(
-    """
-    <div class="legend">
-      <span class="dot" style="background:#0ea5e9"></span> 티머니
-      <span class="dot" style="background:#f97316; margin-left:16px;"></span> 문화상품권
-    </div>
-    """,
-    unsafe_allow_html=True
-)
-
+# -----------------------------
+# 하단 리스트
+# -----------------------------
 st.markdown("---")
-
-# -----------------------------
-# Merchant list
-# -----------------------------
 list_left, list_right = st.columns([1,1])
 left_df = filtered.iloc[::2]
 right_df = filtered.iloc[1::2]
@@ -273,4 +325,5 @@ with list_right:
     for _, rrow in right_df.iterrows():
         render_card(rrow)
 
-st.markdown('<div class="footer-note">※ 현재 데이터는 예시가 포함될 수 있습니다. 운영 전 실제 가맹점으로 교체/검증해 주세요.</div>', unsafe_allow_html=True)
+st.markdown('<div class="footer-note">※ 운영 전 실제 가맹점으로 최종 검수해 주세요. (CSV: data/merchants_seocho.csv)</div>', unsafe_allow_html=True)
+
