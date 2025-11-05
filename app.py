@@ -72,7 +72,7 @@ st.markdown(
 )
 
 # -----------------------------
-# Robust data loader (파일 없어도 앱이 죽지 않게)
+# Robust data loader
 # -----------------------------
 CANDIDATES = [
     Path("data/merchants_seocho.csv"),
@@ -120,32 +120,34 @@ with st.container():
     )
 
 # -----------------------------
-# Controls (Buttons) — 즉시 반응(단일 클릭) 하이라이트
+# Controls (Buttons) — 단일 클릭 즉시 하이라이트
 # -----------------------------
 if "selected" not in st.session_state:
     st.session_state["selected"] = "all"
+selected = st.session_state["selected"]
 
 col1, col2, col3, col4 = st.columns([1,1,1,3])
 
-# 먼저 클릭 감지 → 상태 변경 → 즉시 rerun
+# 현재 상태에 맞춰 type 지정해서 그리기
+tmoney_type  = "primary" if selected == "tmoney" else "secondary"
+culture_type = "primary" if selected == "culture" else "secondary"
+all_type     = "primary" if selected == "all" else "secondary"
+
 with col1:
-    if st.button("티머니", key="tmoney_btn", use_container_width=True):
+    if st.button("티머니", key="tmoney_btn", type=tmoney_type, use_container_width=True):
         st.session_state["selected"] = "tmoney"
         st.rerun()
 with col2:
-    if st.button("문화상품권", key="culture_btn", use_container_width=True):
+    if st.button("문화상품권", key="culture_btn", type=culture_type, use_container_width=True):
         st.session_state["selected"] = "culture"
         st.rerun()
 with col3:
-    if st.button("전체 보기", key="all_btn", use_container_width=True):
+    if st.button("전체 보기", key="all_btn", type=all_type, use_container_width=True):
         st.session_state["selected"] = "all"
         st.rerun()
 
 selected = st.session_state["selected"]
 
-# 상태에 따른 시각적 하이라이트(secondary → primary 대체)
-# Streamlit 기본 버튼은 렌더 타이밍상 같은 위치에 다시 그리기 어렵기 때문에
-# 하이라이트는 KPI/설명에 현재 선택을 노출 + 지도/리스트 필터 반영으로 명확히 표현
 st.caption(f"현재 선택: {'티머니' if selected=='tmoney' else '문화상품권' if selected=='culture' else '전체'}")
 
 # -----------------------------
@@ -272,4 +274,3 @@ with list_right:
         render_card(rrow)
 
 st.markdown('<div class="footer-note">※ 현재 데이터는 예시가 포함될 수 있습니다. 운영 전 실제 가맹점으로 교체/검증해 주세요.</div>', unsafe_allow_html=True)
-
