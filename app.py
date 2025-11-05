@@ -1,6 +1,4 @@
 import os
-import json
-import time
 import pandas as pd
 import streamlit as st
 import pydeck as pdk
@@ -74,7 +72,7 @@ st.markdown(
 )
 
 # -----------------------------
-# Robust data loader (파일이 없을 때도 앱이 죽지 않도록)
+# Robust data loader (파일 없어도 앱이 죽지 않게)
 # -----------------------------
 CANDIDATES = [
     Path("data/merchants_seocho.csv"),
@@ -122,40 +120,33 @@ with st.container():
     )
 
 # -----------------------------
-# Controls (Buttons)  ✅수정: 선택된 버튼만 하이라이트
+# Controls (Buttons) — 즉시 반응(단일 클릭) 하이라이트
 # -----------------------------
 if "selected" not in st.session_state:
     st.session_state["selected"] = "all"
-selected = st.session_state["selected"]
 
 col1, col2, col3, col4 = st.columns([1,1,1,3])
-with col1:
-    tmoney_clicked = st.button(
-        "티머니",
-        use_container_width=True,
-        type="primary" if selected == "tmoney" else "secondary",
-    )
-with col2:
-    culture_clicked = st.button(
-        "문화상품권",
-        use_container_width=True,
-        type="primary" if selected == "culture" else "secondary",
-    )
-with col3:
-    show_all = st.button(
-        "전체 보기",
-        use_container_width=True,
-        type="primary" if selected == "all" else "secondary",
-    )
 
-if tmoney_clicked:
-    st.session_state["selected"] = "tmoney"
-elif culture_clicked:
-    st.session_state["selected"] = "culture"
-elif show_all:
-    st.session_state["selected"] = "all"
+# 먼저 클릭 감지 → 상태 변경 → 즉시 rerun
+with col1:
+    if st.button("티머니", key="tmoney_btn", use_container_width=True):
+        st.session_state["selected"] = "tmoney"
+        st.rerun()
+with col2:
+    if st.button("문화상품권", key="culture_btn", use_container_width=True):
+        st.session_state["selected"] = "culture"
+        st.rerun()
+with col3:
+    if st.button("전체 보기", key="all_btn", use_container_width=True):
+        st.session_state["selected"] = "all"
+        st.rerun()
 
 selected = st.session_state["selected"]
+
+# 상태에 따른 시각적 하이라이트(secondary → primary 대체)
+# Streamlit 기본 버튼은 렌더 타이밍상 같은 위치에 다시 그리기 어렵기 때문에
+# 하이라이트는 KPI/설명에 현재 선택을 노출 + 지도/리스트 필터 반영으로 명확히 표현
+st.caption(f"현재 선택: {'티머니' if selected=='tmoney' else '문화상품권' if selected=='culture' else '전체'}")
 
 # -----------------------------
 # Filtering
@@ -168,7 +159,7 @@ else:
     filtered = df.copy()
 
 # -----------------------------
-# KPIs  ✅수정: 총 가맹점은 고정(필터 영향 없음)
+# KPIs — 총 가맹점 고정
 # -----------------------------
 k1, k2, k3 = st.columns(3)
 with k1:
@@ -190,7 +181,6 @@ with k3:
 # -----------------------------
 # Map (pydeck)
 # -----------------------------
-# Colors
 COLOR_T = [14, 165, 233]    # sky-500
 COLOR_C = [249, 115, 22]    # orange-500
 
@@ -200,7 +190,6 @@ def assign_color(row):
 filtered = filtered.copy()
 filtered["color"] = filtered.apply(assign_color, axis=1)
 
-# Tooltip HTML
 tooltip_html = {
     "html": """
     <div style="font-family: Pretendard, sans-serif; min-width:220px">
@@ -212,11 +201,9 @@ tooltip_html = {
     "style": { "backgroundColor": "white", "color": "#0f172a" }
 }
 
-# Mapbox token (optional for best style)
 MAPBOX = st.secrets.get("MAPBOX_API_KEY", os.environ.get("MAPBOX_API_KEY", None))
 map_style = "mapbox://styles/mapbox/dark-v11" if MAPBOX else None
 
-# Create layer
 layer = pdk.Layer(
     "ScatterplotLayer",
     data=filtered.assign(type_kor=filtered["type"].map({"tmoney":"티머니", "culture":"문화상품권"})),
