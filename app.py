@@ -1,10 +1,11 @@
-
 import os
 import json
 import time
 import pandas as pd
 import streamlit as st
 import pydeck as pdk
+from pathlib import Path
+from io import StringIO
 
 # -----------------------------
 # Page config & base style
@@ -62,15 +63,6 @@ st.markdown(
     }
     .kpi { font-size: 32px; font-weight: 800; letter-spacing:-0.5px;}
     .kpi-sub { color:#334155; font-weight:600; }
-    .btn {
-        border: none; padding: 12px 18px; border-radius: 16px; font-weight: 800;
-        box-shadow: 0 8px 24px rgba(2,6,23,0.15); cursor:pointer;
-        transition: transform .05s ease;
-    }
-    .btn:active{ transform: translateY(1px) }
-    .btn-tmoney { background: #0ea5e9; color:white; }
-    .btn-culture { background: #f97316; color:white; }
-    .btn-ghost { background: rgba(2,6,23,0.04); color:#0f172a; }
     .legend {
         display:flex; gap: 10px; align-items:center; margin-top:6px;
     }
@@ -82,10 +74,29 @@ st.markdown(
 )
 
 # -----------------------------
-# Load data
+# Robust data loader (파일이 없을 때도 앱이 죽지 않도록)
 # -----------------------------
-DATA_PATH = os.path.join("data", "merchants_seocho.csv")
-df = pd.read_csv(DATA_PATH)
+CANDIDATES = [
+    Path("data/merchants_seocho.csv"),
+    Path(__file__).parent / "data" / "merchants_seocho.csv",
+]
+DATA_PATH = None
+for p in CANDIDATES:
+    if p.exists():
+        DATA_PATH = p
+        break
+
+if DATA_PATH is None:
+    st.error("⚠️ 데이터 파일(data/merchants_seocho.csv)을 찾을 수 없습니다.")
+    st.info("레포 루트에 data/merchants_seocho.csv 를 업로드한 뒤 앱을 다시 실행/새로고침하세요.")
+    csv_demo = StringIO("""name,type,lat,lon,address,category
+CGV 센트럴시티,culture,37.50493,127.00487,서울 서초구 신반포로 176 센트럴시티 내,영화관
+GS25 서초역점,tmoney,37.4919,127.0079,서울 서초구 반포대로 서초역 인근,편의점
+교대 알라딘 중고서점(서초점),culture,37.4936,127.0144,서울 서초구 서초중앙로 96,서점
+""")
+    df = pd.read_csv(csv_demo)
+else:
+    df = pd.read_csv(DATA_PATH)
 
 # Center of Seocho-gu
 CENTER = [37.4831, 127.0327]
@@ -111,18 +122,31 @@ with st.container():
     )
 
 # -----------------------------
-# Controls (Buttons)
+# Controls (Buttons)  ✅수정: 선택된 버튼만 하이라이트
 # -----------------------------
-col1, col2, col3, col4 = st.columns([1,1,1,3])
-with col1:
-    tmoney_clicked = st.button("티머니", use_container_width=True, type="primary")
-with col2:
-    culture_clicked = st.button("문화상품권", use_container_width=True)
-with col3:
-    show_all = st.button("전체 보기", use_container_width=True)
-
 if "selected" not in st.session_state:
     st.session_state["selected"] = "all"
+selected = st.session_state["selected"]
+
+col1, col2, col3, col4 = st.columns([1,1,1,3])
+with col1:
+    tmoney_clicked = st.button(
+        "티머니",
+        use_container_width=True,
+        type="primary" if selected == "tmoney" else "secondary",
+    )
+with col2:
+    culture_clicked = st.button(
+        "문화상품권",
+        use_container_width=True,
+        type="primary" if selected == "culture" else "secondary",
+    )
+with col3:
+    show_all = st.button(
+        "전체 보기",
+        use_container_width=True,
+        type="primary" if selected == "all" else "secondary",
+    )
 
 if tmoney_clicked:
     st.session_state["selected"] = "tmoney"
@@ -144,15 +168,24 @@ else:
     filtered = df.copy()
 
 # -----------------------------
-# KPIs
+# KPIs  ✅수정: 총 가맹점은 고정(필터 영향 없음)
 # -----------------------------
 k1, k2, k3 = st.columns(3)
 with k1:
-    st.markdown('<div class="stat-card"><div class="kpi">{}</div><div class="kpi-sub">총 가맹점</div></div>'.format(len(filtered)), unsafe_allow_html=True)
+    st.markdown(
+        '<div class="stat-card"><div class="kpi">{}</div><div class="kpi-sub">총 가맹점</div></div>'.format(len(df)),
+        unsafe_allow_html=True
+    )
 with k2:
-    st.markdown('<div class="stat-card"><div class="kpi">{}</div><div class="kpi-sub">티머니</div></div>'.format(len(df[df["type"]=="tmoney"])), unsafe_allow_html=True)
+    st.markdown(
+        '<div class="stat-card"><div class="kpi">{}</div><div class="kpi-sub">티머니</div></div>'.format(len(df[df["type"]=="tmoney"])),
+        unsafe_allow_html=True
+    )
 with k3:
-    st.markdown('<div class="stat-card"><div class="kpi">{}</div><div class="kpi-sub">문화상품권</div></div>'.format(len(df[df["type"]=="culture"])), unsafe_allow_html=True)
+    st.markdown(
+        '<div class="stat-card"><div class="kpi">{}</div><div class="kpi-sub">문화상품권</div></div>'.format(len(df[df["type"]=="culture"])),
+        unsafe_allow_html=True
+    )
 
 # -----------------------------
 # Map (pydeck)
@@ -164,6 +197,7 @@ COLOR_C = [249, 115, 22]    # orange-500
 def assign_color(row):
     return COLOR_T if row["type"] == "tmoney" else COLOR_C
 
+filtered = filtered.copy()
 filtered["color"] = filtered.apply(assign_color, axis=1)
 
 # Tooltip HTML
@@ -207,12 +241,7 @@ r = pdk.Deck(
     tooltip=tooltip_html,
 )
 
-if MAPBOX:
-    st.pydeck_chart(r, use_container_width=True)
-else:
-    # Fallback: still render (basemap may be minimal)
-    st.pydeck_chart(r, use_container_width=True)
-    st.info("💡 티머니나 문화상품권 버튼을 누르면 해당하는 가맹점만 지도에 표시돼요.")
+st.pydeck_chart(r, use_container_width=True)
 
 # Legend
 st.markdown(
@@ -254,3 +283,6 @@ with list_left:
 with list_right:
     for _, rrow in right_df.iterrows():
         render_card(rrow)
+
+st.markdown('<div class="footer-note">※ 현재 데이터는 예시가 포함될 수 있습니다. 운영 전 실제 가맹점으로 교체/검증해 주세요.</div>', unsafe_allow_html=True)
+
